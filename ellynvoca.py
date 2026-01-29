@@ -1,257 +1,186 @@
-import tkinter as tk
-from tkinter import messagebox
-import csv
+import streamlit as st
+import pandas as pd
 import random
 import re
+import time
 
-class VocabQuizApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("둘째의 단어 시험 (20문제 완전 정복)")
-        self.root.geometry("900x600")
-        
-        # 데이터 저장소
-        self.all_data = []      # CSV 전체 데이터
-        self.lesson_list = []   # 레슨 목록
-        self.quiz_queue = []    # 현재 출제될 문제 리스트 (총 20개)
-        
-        # 상태 변수
-        self.current_question = None
-        self.score = 0
-        self.current_idx = 0    # 현재 몇 번째 문제인지
-        self.total_q = 0        # 총 문제 수
-        self.state = "waiting_answer" # 입력대기(waiting_answer) <-> 다음문제대기(waiting_next)
-        
-        # 화면 프레임 정의
-        self.frame_start = tk.Frame(self.root)
-        self.frame_quiz = tk.Frame(self.root)
-        self.frame_result = tk.Frame(self.root)
-        
-        # 데이터 로드
-        self.load_data("vocab.csv")
-        
-        # UI 구성
-        self.setup_start_screen()
-        self.setup_quiz_screen()
-        self.setup_result_screen()
-        
-        # 첫 화면 보여주기
-        self.show_frame("start")
+# 페이지 설정 (가장 윗부분에 있어야 함)
+st.set_page_config(page_title="둘째의 단어 시험", layout="centered")
 
-    def load_data(self, filename):
-        try:
-            with open(filename, 'r', encoding='utf-8-sig') as f:
-                reader = csv.reader(f)
-                header = next(reader) # 헤더 건너뛰기
-                
-                lessons = set()
-                
-                for row in reader:
-                    # 빈 줄 제외 및 열 개수 확인
-                    if len(row) >= 6:
-                        # A:Lesson(0), B:No(1), C:Word(2), D:Part(3), E:Meaning(4), F:Example(5)
-                        item = {
-                            'lesson': row[0].strip(),
-                            'word': row[2].strip(),
-                            'pos': row[3].strip(),
-                            'meaning': row[4].strip(),
-                            'example': row[5].strip()
-                        }
-                        self.all_data.append(item)
-                        lessons.add(item['lesson'])
-                
-                self.lesson_list = sorted(list(lessons))
-                
-        except FileNotFoundError:
-            messagebox.showerror("오류", "vocab.csv 파일을 찾을 수 없습니다.")
-            self.root.destroy()
-        except Exception as e:
-            messagebox.showerror("오류", f"데이터 로드 중 문제 발생: {e}")
-            self.root.destroy()
+# ------------------ 세션 상태 초기화 ------------------
+if 'quiz_state' not in st.session_state:
+    st.session_state.quiz_state = 'setup'  # setup, quiz, result
+if 'current_q_idx' not in st.session_state:
+    st.session_state.current_q_idx = 0
+if 'score' not in st.session_state:
+    st.session_state.score = 0
+if 'quiz_data' not in st.session_state:
+    st.session_state.quiz_data = []
+if 'feedback_msg' not in st.session_state:
+    st.session_state.feedback_msg = None # 정답/오답 메시지 저장용
+if 'input_value' not in st.session_state:
+    st.session_state.input_value = "" # 입력창 값 제어용
 
-    def show_frame(self, frame_name):
-        """화면 전환용 함수"""
-        self.frame_start.pack_forget()
-        self.frame_quiz.pack_forget()
-        self.frame_result.pack_forget()
-        
-        if frame_name == "start":
-            self.frame_start.pack(fill="both", expand=True)
-            self.listbox_lesson.focus_set()
-        elif frame_name == "quiz":
-            self.frame_quiz.pack(fill="both", expand=True)
-            self.entry_answer.focus_set()
-        elif frame_name == "result":
-            self.frame_result.pack(fill="both", expand=True)
-            self.btn_restart.focus_set()
+# ------------------ 함수 정의 ------------------
 
-    # ------------------ 1. 시작 화면 ------------------
-    def setup_start_screen(self):
-        tk.Label(self.frame_start, text="시험 볼 레슨을 선택하세요", font=("Malgun Gothic", 24, "bold")).pack(pady=50)
+@st.cache_data
+def load_data(file_path):
+    try:
+        df = pd.read_csv(file_path)
+        df.columns = df.columns.str.strip()
+        return df
+    except Exception as e:
+        st.error(f"CSV 파일을 읽을 수 없습니다: {e}")
+        return pd.DataFrame()
 
-        # 레슨 목록 리스트박스
-        self.listbox_lesson = tk.Listbox(self.frame_start, font=("Arial", 16), height=8, selectmode="single")
-        self.listbox_lesson.pack(pady=10, padx=100, fill="x")
-        
-        for lesson in self.lesson_list:
-            self.listbox_lesson.insert(tk.END, lesson)
-            
-        if self.lesson_list:
-            self.listbox_lesson.select_set(0)
+# 정답 제출 시 실행될 콜백 함수
+def submit_answer():
+    # 현재 문제 정보 가져오기
+    idx = st.session_state.current_q_idx
+    q_data = st.session_state.quiz_data[idx]
+    
+    # 사용자 입력값 (앞뒤 공백 제거)
+    user_input = st.session_state.input_value.strip()
+    
+    # 정답 비교
+    if user_input.lower() == q_data['answer'].lower():
+        st.session_state.score += 1
+        st.session_state.feedback_msg = ("correct", f"⭕ 정답입니다! ({q_data['answer']})")
+    else:
+        st.session_state.feedback_msg = ("wrong", f"❌ 틀렸습니다! 정답은 **{q_data['answer']}** 였습니다.")
+    
+    # 다음 문제로 인덱스 증가
+    st.session_state.current_q_idx += 1
+    
+    # 입력창 비우기 (다음 입력을 위해)
+    st.session_state.input_value = ""
 
-        btn_start = tk.Button(self.frame_start, text="시험 시작 (Enter)", font=("Malgun Gothic", 16), 
-                              bg="#4a90e2", fg="white", command=self.start_quiz)
-        btn_start.pack(pady=30, ipadx=20, ipady=10)
+# ------------------ 메인 UI ------------------
 
-        # 엔터키 바인딩
-        self.frame_start.bind('<Return>', lambda e: self.start_quiz())
-        self.listbox_lesson.bind('<Return>', lambda e: self.start_quiz())
+st.title("📝 둘째의 단어 시험")
 
-    def start_quiz(self):
-        selection = self.listbox_lesson.curselection()
-        if not selection:
-            return
-            
-        selected_lesson = self.listbox_lesson.get(selection[0])
-        
-        # 선택된 레슨의 단어들 추출
-        lesson_words = [item for item in self.all_data if item['lesson'] == selected_lesson]
-        
-        if not lesson_words:
-            messagebox.showinfo("알림", "선택한 레슨에 단어가 없습니다.")
-            return
+# 데이터 로드
+df = load_data("vocab.csv")
+if df.empty:
+    st.stop()
 
-        # 문제 생성 (Type A: 뜻, Type B: 예문) -> 총 20문제
-        self.quiz_queue = []
+# [State 1] 시험 범위 선택 화면
+if st.session_state.quiz_state == 'setup':
+    st.subheader("시험 범위를 선택하세요")
+    lesson_list = sorted(df['Lesson'].unique())
+    selected_lesson = st.selectbox("Lesson 선택", lesson_list)
+    
+    # 버튼도 엔터로 넘어가게 하고 싶지만, selectbox 때문에 버튼 클릭 필요
+    if st.button("시험 시작하기 (Start)", use_container_width=True):
+        lesson_df = df[df['Lesson'] == selected_lesson]
         
-        for item in lesson_words:
-            # Type A: 뜻 보고 단어 쓰기
-            self.quiz_queue.append({
-                'type': 'A',
-                'question': item['meaning'],
-                'answer': item['word'],
-                'hint': item['pos'],
-                'original': item
-            })
-            
-            # Type B: 예문 빈칸 채우기
-            # 정규식으로 단어(대소문자 무시) 찾아서 빈칸 만들기
-            pattern = re.compile(re.escape(item['word']), re.IGNORECASE)
-            hidden_example = pattern.sub("______", item['example'])
-            
-            self.quiz_queue.append({
-                'type': 'B',
-                'question': hidden_example,
-                'answer': item['word'],
-                'hint': item['pos'],
-                'original': item
-            })
-            
-        # 문제 섞기
-        random.shuffle(self.quiz_queue)
-        
-        # 초기화
-        self.score = 0
-        self.current_idx = 0
-        self.total_q = len(self.quiz_queue)
-        
-        # 퀴즈 화면으로 이동
-        self.show_frame("quiz")
-        self.load_question()
-
-    # ------------------ 2. 퀴즈 화면 ------------------
-    def setup_quiz_screen(self):
-        # 상단 진행바
-        self.lbl_progress = tk.Label(self.frame_quiz, text="", font=("Arial", 14), fg="gray")
-        self.lbl_progress.pack(pady=20)
-
-        # 문제 유형
-        self.lbl_type = tk.Label(self.frame_quiz, text="", font=("Malgun Gothic", 14, "bold"), fg="#333")
-        self.lbl_type.pack(pady=5)
-
-        # 문제 텍스트
-        self.lbl_question = tk.Label(self.frame_quiz, text="", font=("Arial", 20), wraplength=800, justify="center")
-        self.lbl_question.pack(pady=30, padx=20)
-        
-        # 힌트
-        self.lbl_hint = tk.Label(self.frame_quiz, text="", font=("Arial", 14, "italic"), fg="blue")
-        self.lbl_hint.pack(pady=5)
-
-        # 입력창
-        self.entry_answer = tk.Entry(self.frame_quiz, font=("Arial", 24), justify="center", bg="#f0f8ff")
-        self.entry_answer.pack(pady=20, ipady=10, ipadx=10)
-        
-        # 정답/오답 표시
-        self.lbl_result = tk.Label(self.frame_quiz, text="", font=("Malgun Gothic", 18, "bold"))
-        self.lbl_result.pack(pady=20)
-        
-        # 엔터키 바인딩
-        self.entry_answer.bind('<Return>', self.process_enter)
-
-    def load_question(self):
-        if self.current_idx >= self.total_q:
-            self.finish_quiz()
-            return
-            
-        self.current_question = self.quiz_queue[self.current_idx]
-        
-        # UI 업데이트
-        self.lbl_progress.config(text=f"Question {self.current_idx + 1} / {self.total_q}")
-        
-        if self.current_question['type'] == 'A':
-            self.lbl_type.config(text="[문제] 뜻을 보고 단어를 쓰세요")
+        if lesson_df.empty:
+            st.error("단어가 없습니다.")
         else:
-            self.lbl_type.config(text="[문제] 빈칸에 들어갈 단어를 쓰세요")
+            # 문제 생성
+            quiz_list = []
+            for _, row in lesson_df.iterrows():
+                # Type A (뜻)
+                quiz_list.append({
+                    'type': 'A',
+                    'question': row['Meaning'],
+                    'answer': row['Word'].strip(),
+                    'hint': row['Part'],
+                    'display_hint': "뜻을 보고 단어를 쓰세요"
+                })
+                # Type B (예문)
+                target = row['Word'].strip()
+                pattern = re.compile(re.escape(target), re.IGNORECASE)
+                hidden_ex = pattern.sub("______", row['Example'])
+                quiz_list.append({
+                    'type': 'B',
+                    'question': hidden_ex,
+                    'answer': target,
+                    'hint': row['Part'],
+                    'display_hint': "빈칸에 알맞은 단어를 쓰세요"
+                })
             
-        self.lbl_question.config(text=self.current_question['question'])
-        self.lbl_hint.config(text=f"({self.current_question['hint']})")
-        
-        # 입력창 초기화
-        self.entry_answer.delete(0, tk.END)
-        self.lbl_result.config(text="")
-        self.entry_answer.config(bg="#f0f8ff") # 배경색 원래대로
-        
-        self.state = "waiting_answer"
+            random.shuffle(quiz_list)
+            st.session_state.quiz_data = quiz_list
+            st.session_state.total_q = len(quiz_list)
+            st.session_state.current_q_idx = 0
+            st.session_state.score = 0
+            st.session_state.feedback_msg = None
+            st.session_state.quiz_state = 'quiz'
+            st.rerun()
 
-    def process_enter(self, event):
-        if self.state == "waiting_answer":
-            self.check_answer()
-        elif self.state == "waiting_next":
-            self.current_idx += 1
-            self.load_question()
+# [State 2] 퀴즈 진행 화면
+elif st.session_state.quiz_state == 'quiz':
+    
+    # 1. 진행 상황 체크
+    current_idx = st.session_state.current_q_idx
+    total_q = st.session_state.total_q
+    
+    # 2. 모든 문제 종료 시 결과 화면으로
+    if current_idx >= total_q:
+        st.session_state.quiz_state = 'result'
+        st.rerun()
 
-    def check_answer(self):
-        user_input = self.entry_answer.get().strip()
-        correct_word = self.current_question['answer']
-        
-        if user_input.lower() == correct_word.lower():
-            self.lbl_result.config(text="정답입니다! (O)", fg="green")
-            self.entry_answer.config(bg="#e6fffa") # 초록빛 배경
-            self.score += 1
+    # 3. 이전 문제 결과 피드백 표시 (화면 상단)
+    # 다음 문제가 나와도 이전 문제의 결과를 위에 보여줍니다.
+    if st.session_state.feedback_msg:
+        msg_type, msg_text = st.session_state.feedback_msg
+        if msg_type == "correct":
+            st.success(msg_text)
         else:
-            self.lbl_result.config(text=f"틀렸습니다. 정답: {correct_word}", fg="red")
-            self.entry_answer.config(bg="#ffe6e6") # 붉은빛 배경
-            
-        self.state = "waiting_next"
+            st.error(msg_text)
+    else:
+        st.info("준비되면 아래 빈칸에 정답을 쓰고 Enter를 치세요!")
 
-    # ------------------ 3. 결과 화면 ------------------
-    def setup_result_screen(self):
-        tk.Label(self.frame_result, text="시험 종료!", font=("Malgun Gothic", 30, "bold")).pack(pady=50)
-        
-        self.lbl_final_score = tk.Label(self.frame_result, text="", font=("Malgun Gothic", 24), fg="blue")
-        self.lbl_final_score.pack(pady=20)
-        
-        self.btn_restart = tk.Button(self.frame_result, text="다시 시작하기 (Enter)", font=("Malgun Gothic", 16),
-                                     bg="#4a90e2", fg="white", command=lambda: self.show_frame("start"))
-        self.btn_restart.pack(pady=40, ipadx=20, ipady=10)
-        
-        self.frame_result.bind('<Return>', lambda e: self.show_frame("start"))
+    # 4. 현재 문제 표시
+    q_data = st.session_state.quiz_data[current_idx]
+    
+    st.markdown(f"### Q{current_idx + 1}. {q_data['display_hint']}")
+    
+    # 문제 박스 (가독성을 위해 스타일링)
+    st.markdown(f"""
+        <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; font-size:20px; margin-bottom:20px;">
+            <b>{q_data['question']}</b>
+            <br><span style="color:blue; font-size:16px;">(힌트: {q_data['hint']})</span>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 5. 입력창 (가장 중요: on_change 사용)
+    # key='input_value'를 통해 세션 변수와 연결
+    # on_change=submit_answer를 통해 엔터를 치면 submit_answer 함수가 실행됨
+    st.text_input(
+        label="정답 입력",
+        key="input_value",
+        on_change=submit_answer,
+        label_visibility="collapsed",
+        placeholder="여기에 정답을 쓰고 Enter를 누르세요"
+    )
+    
+    # 진행률 바
+    st.progress((current_idx) / total_q)
 
-    def finish_quiz(self):
-        self.lbl_final_score.config(text=f"총점: {self.score} / {self.total_q} 점")
-        self.show_frame("result")
+# [State 3] 결과 화면
+elif st.session_state.quiz_state == 'result':
+    st.balloons()
+    st.title("🎉 시험 종료!")
+    
+    score = st.session_state.score
+    total = st.session_state.total_q
+    
+    # 점수 표시
+    st.metric(label="최종 점수", value=f"{score}점", delta=f"{total}문제 중 {score}개 정답")
+    
+    if score == total:
+        st.success("완벽해요! 💯")
+    elif score >= total * 0.8:
+        st.info("아주 잘했어요! 🌟")
+    else:
+        st.warning("조금 더 연습해봐요! 💪")
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = VocabQuizApp(root)
-    root.mainloop()
+    # 다시 하기 버튼
+    if st.button("처음으로 돌아가기"):
+        st.session_state.quiz_state = 'setup'
+        st.session_state.score = 0
+        st.session_state.current_q_idx = 0
+        st.session_state.feedback_msg = None
+        st.rerun()
