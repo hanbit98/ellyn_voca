@@ -7,10 +7,9 @@ import time
 # 페이지 설정
 st.set_page_config(page_title="😁엘린이의 단어 시험❤️", layout="centered")
 
-# [NEW] 스타일 적용: 입력창 폰트 크기 키우기
+# 스타일 적용: 입력창 폰트 크기 키우기
 st.markdown("""
     <style>
-    /* 입력창 폰트 크기 및 높이 조절 */
     .stTextInput input {
         font-size: 28px !important;
         padding: 15px !important;
@@ -84,8 +83,6 @@ if st.session_state.quiz_state == 'setup':
     lesson_list = sorted(df['Lesson'].unique())
     selected_lesson = st.selectbox("Lesson 선택", lesson_list)
     
-    # (데이터 확인하기 버튼 삭제됨)
-
     if st.button("시험 시작하기 (Start)", use_container_width=True):
         lesson_df = df[df['Lesson'] == selected_lesson]
         
@@ -143,10 +140,12 @@ elif st.session_state.quiz_state == 'quiz':
     current_idx = st.session_state.current_q_idx
     total_q = st.session_state.total_q
     
+    # 마지막 문제까지 다 풀었으면 결과 화면으로 이동
     if current_idx >= total_q:
         st.session_state.quiz_state = 'result'
         st.rerun()
 
+    # 상단 피드백 메시지 (이전 문제 결과)
     if st.session_state.feedback_msg:
         msg_type, msg_text = st.session_state.feedback_msg
         if msg_type == "correct":
@@ -185,6 +184,17 @@ elif st.session_state.quiz_state == 'quiz':
 
 # [State 3] 결과
 elif st.session_state.quiz_state == 'result':
+    
+    # [수정된 부분] 마지막 문제의 정답 여부를 결과 화면 최상단에 표시
+    if st.session_state.feedback_msg:
+        msg_type, msg_text = st.session_state.feedback_msg
+        st.markdown("### 마지막 문제 결과:")
+        if msg_type == "correct":
+            st.success(msg_text)
+        else:
+            st.error(msg_text)
+        st.markdown("---")
+
     st.balloons()
     st.title("🎉 시험 종료!")
     
@@ -207,7 +217,6 @@ elif st.session_state.quiz_state == 'result':
     col1, col2 = st.columns(2)
     
     with col1:
-        # 틀린 문제가 있을 때만 버튼 표시
         if incorrect_count > 0:
             if st.button(f"틀린 문제만 다시 풀기 ({incorrect_count}개)", type="primary", use_container_width=True):
                 st.session_state.quiz_data = st.session_state.incorrect_questions.copy()
