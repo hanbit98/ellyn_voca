@@ -100,9 +100,14 @@ if st.session_state.quiz_state == 'setup':
 
                 # Type A (뜻)
                 if meaning:
+                    # [추가] 뜻이 여러 개일 때 (1. 2. n. v. 등) 자동 줄바꿈 처리
+                    fmt_mean = meaning.replace('\r\n', '<br>').replace('\n', '<br>')
+                    fmt_mean = re.sub(r'\s+(?=\d+\.\s|(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)', '<br>', fmt_mean)
+                    if fmt_mean.startswith('<br>'): fmt_mean = fmt_mean[4:]
+                    
                     quiz_list.append({
                         'type': 'A',
-                        'question': meaning, 
+                        'question': fmt_mean, 
                         'answer': word,
                         'hint': part, 
                         'display_hint': "뜻을 보고 단어를 쓰세요"
@@ -114,9 +119,14 @@ if st.session_state.quiz_state == 'setup':
                     pattern = re.compile(re.escape(target), re.IGNORECASE)
                     hidden_ex = pattern.sub("______", example)
                     
+                    # [추가] 예문이 여러 개일 때 자동 줄바꿈을 적용해 동시에 나열되도록 처리
+                    fmt_ex = hidden_ex.replace('\r\n', '<br>').replace('\n', '<br>')
+                    fmt_ex = re.sub(r'\s+(?=\d+\.\s|(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)', '<br><br>', fmt_ex)
+                    if fmt_ex.startswith('<br><br>'): fmt_ex = fmt_ex[8:]
+                    
                     quiz_list.append({
                         'type': 'B',
-                        'question': hidden_ex,
+                        'question': fmt_ex,
                         'answer': target,
                         'hint': part,
                         'display_hint': "빈칸에 알맞은 단어를 쓰세요"
@@ -159,11 +169,10 @@ elif st.session_state.quiz_state == 'quiz':
     
     st.markdown(f"### Q{current_idx + 1}. {q_data['display_hint']}")
     
-    # 줄바꿈 및 힌트 처리
-    display_question = q_data['question'].replace('\r\n', '<br>').replace('\n', '<br>')
+    display_question = q_data['question']
     hint_html = ""
     if q_data['hint']: 
-        hint_html = f'<br><span style="color:blue; font-size:16px;">(힌트: {q_data["hint"]})</span>'
+        hint_html = f'<br><br><span style="color:blue; font-size:16px;">(힌트: {q_data["hint"]})</span>'
 
     st.markdown(f"""
         <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; font-size:20px; margin-bottom:20px; line-height: 1.6;">
@@ -185,7 +194,6 @@ elif st.session_state.quiz_state == 'quiz':
 # [State 3] 결과
 elif st.session_state.quiz_state == 'result':
     
-    # [수정된 부분] 마지막 문제의 정답 여부를 결과 화면 최상단에 표시
     if st.session_state.feedback_msg:
         msg_type, msg_text = st.session_state.feedback_msg
         st.markdown("### 마지막 문제 결과:")
