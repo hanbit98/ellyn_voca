@@ -1,3 +1,12 @@
+아! 최근에 추가한 레슨들(예문이 없는 단어들) 때문에 발생하는 에러야.
+
+CSV 파일에 Example(예문) 칸이 비어있거나, 해당 열이 완벽히 채워져 있지 않으면 프로그램이 그것을 글자(String)가 아니라 숫자/결측치(NaN)로 인식해버려. 그래서 글자의 공백을 없애는 .strip() 함수를 사용하려고 할 때 에러가 나면서 튕긴 거야.
+
+어떤 레슨이든, 예문 칸이 비어있든 없든 에러가 나지 않도록 데이터를 읽어올 때 한 번 더 안전하게 보호(str(row.get(...)))하는 코드로 수정했어.
+
+아래 코드로 ellynvoca.py를 다시 전체 덮어쓰기 해주면 바로 해결될 거야!
+
+Python
 import streamlit as st
 import pandas as pd
 import random
@@ -41,12 +50,6 @@ def load_data(file_path):
     try:
         df = pd.read_csv(file_path)
         df.columns = df.columns.str.strip()
-        
-        # 데이터 전처리
-        df = df.astype(str)
-        df = df.replace('nan', '')
-        df = df[df['Word'].str.strip() != '']
-        
         return df
     except Exception as e:
         st.error(f"CSV 파일을 읽을 수 없습니다: {e}")
@@ -80,11 +83,17 @@ if df.empty:
 # [State 1] 설정 화면
 if st.session_state.quiz_state == 'setup':
     st.subheader("시험 범위를 선택하세요")
-    lesson_list = sorted(df['Lesson'].unique())
-    selected_lesson = st.selectbox("Lesson 선택", lesson_list)
+    
+    # Lesson 열이 있는지 안전하게 확인
+    if 'Lesson' in df.columns:
+        lesson_list = sorted(df['Lesson'].astype(str).unique())
+        selected_lesson = st.selectbox("Lesson 선택", lesson_list)
+    else:
+        st.error("CSV 파일에 'Lesson' 열이 없습니다.")
+        st.stop()
     
     if st.button("시험 시작하기 (Start)", use_container_width=True):
-        lesson_df = df[df['Lesson'] == selected_lesson]
+        lesson_df = df[df['Lesson'].astype(str) == selected_lesson]
         
         if lesson_df.empty:
             st.error("선택한 레슨에 단어가 없습니다.")
@@ -93,14 +102,18 @@ if st.session_state.quiz_state == 'setup':
             is_wordly = selected_lesson.strip().lower().startswith("wordly")
 
             for _, row in lesson_df.iterrows():
-                word = row['Word'].strip()
-                meaning = row['Meaning'].strip()
-                example = row['Example'].strip()
-                part = row['Part'].strip()
+                # [수정된 부분] get()과 str()을 사용해 데이터가 없거나 결측치(NaN)일 때 에러가 나지 않게 처리
+                word = str(row.get('Word', '')).replace('nan', '').strip()
+                meaning = str(row.get('Meaning', '')).replace('nan', '').strip()
+                example = str(row.get('Example', '')).replace('nan', '').strip()
+                part = str(row.get('Part', '')).replace('nan', '').strip()
+
+                # 단어가 비어있으면 문제 생성 건너뛰기
+                if not word:
+                    continue
 
                 # Type A (뜻)
                 if meaning:
-                    # [추가] 뜻이 여러 개일 때 (1. 2. n. v. 등) 자동 줄바꿈 처리
                     fmt_mean = meaning.replace('\r\n', '<br>').replace('\n', '<br>')
                     fmt_mean = re.sub(r'\s+(?=\d+\.\s|(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)', '<br>', fmt_mean)
                     if fmt_mean.startswith('<br>'): fmt_mean = fmt_mean[4:]
@@ -119,7 +132,6 @@ if st.session_state.quiz_state == 'setup':
                     pattern = re.compile(re.escape(target), re.IGNORECASE)
                     hidden_ex = pattern.sub("______", example)
                     
-                    # [추가] 예문이 여러 개일 때 자동 줄바꿈을 적용해 동시에 나열되도록 처리
                     fmt_ex = hidden_ex.replace('\r\n', '<br>').replace('\n', '<br>')
                     fmt_ex = re.sub(r'\s+(?=\d+\.\s|(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)', '<br><br>', fmt_ex)
                     if fmt_ex.startswith('<br><br>'): fmt_ex = fmt_ex[8:]
@@ -133,7 +145,7 @@ if st.session_state.quiz_state == 'setup':
                     })
             
             if not quiz_list:
-                st.error("문제를 생성할 수 없습니다.")
+                st.error("문제를 생성할 수 없습니다. 뜻이나 예문 데이터가 있는지 확인해주세요.")
             else:
                 random.shuffle(quiz_list)
                 st.session_state.quiz_data = quiz_list
@@ -150,12 +162,10 @@ elif st.session_state.quiz_state == 'quiz':
     current_idx = st.session_state.current_q_idx
     total_q = st.session_state.total_q
     
-    # 마지막 문제까지 다 풀었으면 결과 화면으로 이동
     if current_idx >= total_q:
         st.session_state.quiz_state = 'result'
         st.rerun()
 
-    # 상단 피드백 메시지 (이전 문제 결과)
     if st.session_state.feedback_msg:
         msg_type, msg_text = st.session_state.feedback_msg
         if msg_type == "correct":
