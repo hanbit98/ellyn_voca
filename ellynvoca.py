@@ -91,10 +91,8 @@ if st.session_state.quiz_state == 'setup':
             st.error("선택한 레슨에 단어가 없습니다.")
         else:
             quiz_list = []
-            is_wordly = selected_lesson.strip().lower().startswith("wordly")
 
             for _, row in lesson_df.iterrows():
-                # [핵심 수정] 이름(Header) 대신 엑셀의 열 순서(인덱스)로 강제 지정해서 가져오기
                 # C열(2)=단어, D열(3)=품사, E열(4)=뜻, F열(5)=예문
                 word = str(row.iloc[2]).replace('nan', '').strip() if len(row) > 2 else ''
                 part = str(row.iloc[3]).replace('nan', '').strip() if len(row) > 3 else ''
@@ -119,8 +117,8 @@ if st.session_state.quiz_state == 'setup':
                         'display_hint': "뜻을 보고 단어를 쓰세요"
                     })
                 
-                # Type B (예문 문제) - Wordly 제외
-                if example and not is_wordly:
+                # Type B (예문 문제) - 이제 Wordly 레슨을 포함하여 모두 출제
+                if example:
                     target = word
                     pattern = re.compile(re.escape(target), re.IGNORECASE)
                     hidden_ex = pattern.sub("______", example)
