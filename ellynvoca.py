@@ -75,16 +75,17 @@ if df.empty:
 if st.session_state.quiz_state == 'setup':
     st.subheader("시험 범위를 선택하세요")
     
-    # Lesson 열이 있는지 안전하게 확인
-    if 'Lesson' in df.columns:
-        lesson_list = sorted(df['Lesson'].astype(str).unique())
+    # A열(Lesson) 기준으로 리스트 만들기
+    if len(df.columns) > 0:
+        lesson_col = df.columns[0]
+        lesson_list = sorted(df[lesson_col].astype(str).unique())
         selected_lesson = st.selectbox("Lesson 선택", lesson_list)
     else:
-        st.error("CSV 파일에 'Lesson' 열이 없습니다.")
+        st.error("CSV 파일에 데이터가 없습니다.")
         st.stop()
     
     if st.button("시험 시작하기 (Start)", use_container_width=True):
-        lesson_df = df[df['Lesson'].astype(str) == selected_lesson]
+        lesson_df = df[df[lesson_col].astype(str) == selected_lesson]
         
         if lesson_df.empty:
             st.error("선택한 레슨에 단어가 없습니다.")
@@ -93,17 +94,18 @@ if st.session_state.quiz_state == 'setup':
             is_wordly = selected_lesson.strip().lower().startswith("wordly")
 
             for _, row in lesson_df.iterrows():
-                # [수정된 부분] get()과 str()을 사용해 데이터가 없거나 결측치(NaN)일 때 에러가 나지 않게 처리
-                word = str(row.get('Word', '')).replace('nan', '').strip()
-                meaning = str(row.get('Meaning', '')).replace('nan', '').strip()
-                example = str(row.get('Example', '')).replace('nan', '').strip()
-                part = str(row.get('Part', '')).replace('nan', '').strip()
+                # [핵심 수정] 이름(Header) 대신 엑셀의 열 순서(인덱스)로 강제 지정해서 가져오기
+                # C열(2)=단어, D열(3)=품사, E열(4)=뜻, F열(5)=예문
+                word = str(row.iloc[2]).replace('nan', '').strip() if len(row) > 2 else ''
+                part = str(row.iloc[3]).replace('nan', '').strip() if len(row) > 3 else ''
+                meaning = str(row.iloc[4]).replace('nan', '').strip() if len(row) > 4 else ''
+                example = str(row.iloc[5]).replace('nan', '').strip() if len(row) > 5 else ''
 
-                # 단어가 비어있으면 문제 생성 건너뛰기
+                # 단어가 비어있으면 건너뛰기
                 if not word:
                     continue
 
-                # Type A (뜻)
+                # Type A (뜻 문제)
                 if meaning:
                     fmt_mean = meaning.replace('\r\n', '<br>').replace('\n', '<br>')
                     fmt_mean = re.sub(r'\s+(?=\d+\.\s|(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)', '<br>', fmt_mean)
@@ -117,7 +119,7 @@ if st.session_state.quiz_state == 'setup':
                         'display_hint': "뜻을 보고 단어를 쓰세요"
                     })
                 
-                # Type B (예문) - Wordly 제외
+                # Type B (예문 문제) - Wordly 제외
                 if example and not is_wordly:
                     target = word
                     pattern = re.compile(re.escape(target), re.IGNORECASE)
@@ -136,7 +138,7 @@ if st.session_state.quiz_state == 'setup':
                     })
             
             if not quiz_list:
-                st.error("문제를 생성할 수 없습니다. 뜻이나 예문 데이터가 있는지 확인해주세요.")
+                st.error("문제를 생성할 수 없습니다. 데이터가 있는지 확인해주세요.")
             else:
                 random.shuffle(quiz_list)
                 st.session_state.quiz_data = quiz_list
