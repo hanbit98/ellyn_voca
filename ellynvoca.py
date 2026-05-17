@@ -106,7 +106,8 @@ if st.session_state.quiz_state == 'setup':
                 # Type A (뜻 문제)
                 if meaning:
                     fmt_mean = meaning.replace('\r\n', '<br>').replace('\n', '<br>')
-                    fmt_mean = re.sub(r'\s+(?=\d+\.\s|(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)', '<br>', fmt_mean)
+                    # [정밀 수정] 품사 약자 뒤에 바로 오는 숫자는 띄우지 않도록 룩비하인드(Lookbehind) 조건 추가
+                    fmt_mean = re.sub(r'\s+(?=(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)|(?<!\b(?:n|v|adj|adv|prep|conj|pron|phrase)\.)\s+(?=\d+\.\s)', '<br>', fmt_mean)
                     if fmt_mean.startswith('<br>'): fmt_mean = fmt_mean[4:]
                     
                     quiz_list.append({
@@ -117,14 +118,15 @@ if st.session_state.quiz_state == 'setup':
                         'display_hint': "뜻을 보고 단어를 쓰세요"
                     })
                 
-                # Type B (예문 문제) - 이제 Wordly 레슨을 포함하여 모두 출제
+                # Type B (예문 문제)
                 if example:
                     target = word
                     pattern = re.compile(re.escape(target), re.IGNORECASE)
                     hidden_ex = pattern.sub("______", example)
                     
                     fmt_ex = hidden_ex.replace('\r\n', '<br>').replace('\n', '<br>')
-                    fmt_ex = re.sub(r'\s+(?=\d+\.\s|(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)', '<br><br>', fmt_ex)
+                    # [정밀 수정] 품사 약자 뒤에 바로 오는 숫자는 띄우지 않도록 룩비하인드(Lookbehind) 조건 추가
+                    fmt_ex = re.sub(r'\s+(?=(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)|(?<!\b(?:n|v|adj|adv|prep|conj|pron|phrase)\.)\s+(?=\d+\.\s)', '<br><br>', fmt_ex)
                     if fmt_ex.startswith('<br><br>'): fmt_ex = fmt_ex[8:]
                     
                     quiz_list.append({
