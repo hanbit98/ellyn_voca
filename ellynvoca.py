@@ -106,8 +106,14 @@ if st.session_state.quiz_state == 'setup':
                 # Type A (뜻 문제)
                 if meaning:
                     fmt_mean = meaning.replace('\r\n', '<br>').replace('\n', '<br>')
-                    # [정밀 수정] 품사 약자 뒤에 바로 오는 숫자는 띄우지 않도록 룩비하인드(Lookbehind) 조건 추가
-                    fmt_mean = re.sub(r'\s+(?=(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)|(?<!\b(?:n|v|adj|adv|prep|conj|pron|phrase)\.)\s+(?=\d+\.\s)', '<br>', fmt_mean)
+                    
+                    # [안전한 수정] 후방 탐색 오류를 방지하기 위해 n. 1. 같은 결합 구조를 임시 보호 처리
+                    fmt_mean = re.sub(r'\b(n|v|adj|adv|prep|conj|pron|phrase)\.\s+(\d+\.)', r'\1.#SPACE#\2', fmt_mean)
+                    # 보호된 조합 외의 단독 품사나 숫자 앞에서만 줄바꿈 처리
+                    fmt_mean = re.sub(r'\s+(?=(?:n|v|adj|adv|prep|conj|pron|phrase)\.|\d+\.)', '<br>', fmt_mean)
+                    # 보호했던 공백 복원
+                    fmt_mean = fmt_mean.replace('#SPACE#', ' ')
+                    
                     if fmt_mean.startswith('<br>'): fmt_mean = fmt_mean[4:]
                     
                     quiz_list.append({
@@ -125,8 +131,12 @@ if st.session_state.quiz_state == 'setup':
                     hidden_ex = pattern.sub("______", example)
                     
                     fmt_ex = hidden_ex.replace('\r\n', '<br>').replace('\n', '<br>')
-                    # [정밀 수정] 품사 약자 뒤에 바로 오는 숫자는 띄우지 않도록 룩비하인드(Lookbehind) 조건 추가
-                    fmt_ex = re.sub(r'\s+(?=(?:n|v|adj|adv|prep|conj|pron|phrase)\.\s)|(?<!\b(?:n|v|adj|adv|prep|conj|pron|phrase)\.)\s+(?=\d+\.\s)', '<br><br>', fmt_ex)
+                    
+                    # [안전한 수정] 예문에서도 마찬가지로 n. 1. 형태 보호 후 줄바꿈 진행
+                    fmt_ex = re.sub(r'\b(n|v|adj|adv|prep|conj|pron|phrase)\.\s+(\d+\.)', r'\1.#SPACE#\2', fmt_ex)
+                    fmt_ex = re.sub(r'\s+(?=(?:n|v|adj|adv|prep|conj|pron|phrase)\.|\d+\.)', '<br><br>', fmt_ex)
+                    fmt_ex = fmt_ex.replace('#SPACE#', ' ')
+                    
                     if fmt_ex.startswith('<br><br>'): fmt_ex = fmt_ex[8:]
                     
                     quiz_list.append({
