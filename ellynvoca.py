@@ -78,14 +78,16 @@ if st.session_state.quiz_state == 'setup':
     # A열(Lesson) 기준으로 리스트 만들기
     if len(df.columns) > 0:
         lesson_col = df.columns[0]
-        lesson_list = sorted(df[lesson_col].astype(str).unique())
+        valid_lessons = df[lesson_col].dropna().astype(str).str.strip()
+        valid_lessons = valid_lessons[valid_lessons != '']
+        lesson_list = sorted(valid_lessons.unique().tolist())
         selected_lesson = st.selectbox("Lesson 선택", lesson_list)
     else:
         st.error("CSV 파일에 데이터가 없습니다.")
         st.stop()
     
     if st.button("시험 시작하기 (Start)", use_container_width=True):
-        lesson_df = df[df[lesson_col].astype(str) == selected_lesson]
+        lesson_df = df[df[lesson_col].astype(str).str.strip() == selected_lesson]
         
         if lesson_df.empty:
             st.error("선택한 레슨에 단어가 없습니다.")
