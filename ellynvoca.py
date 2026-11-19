@@ -180,7 +180,7 @@ elif st.session_state.quiz_state == 'quiz':
 
     q_data = st.session_state.quiz_data[current_idx]
     
-    st.markdown(f"### Q{current_idx + 1}. {q_data['display_hint']}")
+    st.markdown(f"### Q{current_idx + 1}. ({current_idx + 1} / {total_q}) {q_data['display_hint']}")
     
     display_question = q_data['question']
     hint_html = ""
@@ -202,7 +202,13 @@ elif st.session_state.quiz_state == 'quiz':
         placeholder="여기에 정답을 입력하세요"
     )
     
-    st.progress((current_idx) / total_q)
+    st.progress((current_idx + 1) / total_q)
+    st.markdown(
+        f"<div style='text-align: right; font-size: 14px; color: #555555; margin-top: -10px;'>"
+        f"진행률: <b>{current_idx + 1} / {total_q}</b>"
+        f"</div>",
+        unsafe_allow_html=True
+    )
 
 # [State 3] 결과
 elif st.session_state.quiz_state == 'result':
